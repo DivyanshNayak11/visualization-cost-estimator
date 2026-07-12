@@ -1,18 +1,1797 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Visualization Cost Estimator v1</title>
-<link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DNA Visuals – Visualization Cost Estimator</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23050505'/%3E%3Crect x='1' y='1' width='30' height='30' rx='5' fill='none' stroke='%23D4AF37' stroke-width='1.5'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-family='Inter,sans-serif' font-size='9' font-weight='700' fill='%23D4AF37'%3EDNA%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --gold: #D4AF37;
+      --gold-light: #E8C96A;
+      --gold-dim: rgba(212, 175, 55, 0.15);
+      --gold-glow: rgba(212, 175, 55, 0.35);
+      --bg: #050505;
+      --bg-elevated: #0c0c0c;
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-hover: rgba(255, 255, 255, 0.07);
+      --text: #f5f5f5;
+      --text-muted: rgba(255, 255, 255, 0.45);
+      --text-dim: rgba(255, 255, 255, 0.25);
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+      --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ambient background */
+    .ambient {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .ambient__orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.4;
+      animation: drift 20s ease-in-out infinite alternate;
+    }
+
+    .ambient__orb--1 {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(212,175,55,0.12) 0%, transparent 70%);
+      top: -200px; right: -100px;
+    }
+
+    .ambient__orb--2 {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(80,60,20,0.15) 0%, transparent 70%);
+      bottom: -150px; left: -100px;
+      animation-delay: -8s;
+    }
+
+    .ambient__grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black, transparent);
+    }
+
+    @keyframes drift {
+      from { transform: translate(0, 0) scale(1); }
+      to   { transform: translate(30px, -20px) scale(1.05); }
+    }
+
+    /* Layout */
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 48px;
+      animation: fadeUp 0.8s ease both;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand__mark {
+      width: 44px;
+      height: 44px;
+      border: 1.5px solid var(--gold);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: var(--gold);
+      background: var(--gold-dim);
+      box-shadow: 0 0 24px var(--gold-glow);
+    }
+
+    .brand__text h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .brand__text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .header__badge {
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gold);
+      border: 1px solid rgba(212,175,55,0.3);
+      padding: 6px 14px;
+      border-radius: 100px;
+      background: var(--gold-dim);
+    }
+
+    /* Main grid */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Glass panel */
+    .panel {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel__header {
+      padding: 24px 28px 0;
+    }
+
+    .panel__header h2 {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .panel__header h3 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      margin-top: 6px;
+    }
+
+    .panel__body { padding: 24px 28px 28px; }
+
+    /* Form */
+    .form-section { animation: fadeUp 0.8s 0.1s ease both; }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 600px) {
+      .field-grid { grid-template-columns: 1fr; }
+    }
+
+    .field { display: flex; flex-direction: column; gap: 8px; }
+
+    .field label {
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .field input {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+    }
+
+    .field input::placeholder { color: var(--text-dim); }
+
+    .field input:focus {
+      border-color: rgba(212,175,55,0.5);
+      box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
+      background: rgba(0,0,0,0.55);
+    }
+
+    /* Quality cards */
+    .quality-section { margin-bottom: 28px; }
+
+    .quality-section > label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .quality-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .quality-card {
+      position: relative;
+      cursor: pointer;
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      background: rgba(0,0,0,0.3);
+      transition: all var(--transition);
+      overflow: hidden;
+    }
+
+    .quality-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--gold-dim), transparent);
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+
+    .quality-card:hover {
+      border-color: rgba(212,175,55,0.25);
+      background: var(--glass-hover);
+      transform: translateY(-2px);
+    }
+
+    .quality-card.active {
+      border-color: var(--gold);
+      box-shadow: 0 0 32px var(--gold-glow), inset 0 0 0 1px rgba(212,175,55,0.2);
+    }
+
+    .quality-card.active::before { opacity: 1; }
+
+    .quality-card input { display: none; }
+
+    .quality-card__tier {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      position: relative;
+    }
+
+    .quality-card.active .quality-card__tier { color: var(--gold); }
+
+    .quality-card__rate {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-top: 8px;
+      position: relative;
+    }
+
+    .quality-card__unit {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      position: relative;
+    }
+
+    .quality-card__check {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition);
+    }
+
+    .quality-card.active .quality-card__check {
+      background: var(--gold);
+      border-color: var(--gold);
+    }
+
+    .quality-card.active .quality-card__check::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: #000;
+      border-radius: 50%;
+    }
+
+    /* Design rate */
+    .rate-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-radius: var(--radius-sm);
+      background: rgba(212,175,55,0.06);
+      border: 1px solid rgba(212,175,55,0.15);
+    }
+
+    .rate-banner__label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .rate-banner__value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--gold);
+    }
+
+    /* Calculation panel */
+    .calc-panel {
+      position: sticky;
+      top: 24px;
+      animation: fadeUp 0.8s 0.2s ease both;
+    }
+
+    .calc-rows { display: flex; flex-direction: column; gap: 0; }
+
+    .calc-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 0;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .calc-row:last-of-type { border-bottom: none; }
+
+    .calc-row__label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .calc-row__value {
+      font-size: 1.15rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+
+    .calc-total {
+      margin-top: 8px;
+      padding: 24px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, rgba(212,175,55,0.12), rgba(212,175,55,0.04));
+      border: 1px solid rgba(212,175,55,0.25);
+      text-align: center;
+    }
+
+    .calc-total__label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    .calc-total__value {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      margin-top: 8px;
+      font-variant-numeric: tabular-nums;
+      background: linear-gradient(135deg, var(--gold-light), var(--gold));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Buttons */
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 28px;
+      flex-wrap: wrap;
+      animation: fadeUp 0.8s 0.3s ease both;
+    }
+
+    .btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      transition: all var(--transition);
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .btn:hover::after { opacity: 1; }
+
+    .btn--primary {
+      background: linear-gradient(135deg, var(--gold-light), var(--gold));
+      color: #0a0a0a;
+      box-shadow: 0 4px 24px var(--gold-glow);
+    }
+
+    .btn--primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px var(--gold-glow);
+    }
+
+    .btn--secondary {
+      background: var(--glass);
+      color: var(--text);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(12px);
+    }
+
+    .btn--secondary:hover {
+      border-color: rgba(255,255,255,0.18);
+      background: var(--glass-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn--ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid transparent;
+    }
+
+    .btn--ghost:hover {
+      color: var(--text);
+      border-color: var(--glass-border);
+    }
+
+    .btn:active { transform: scale(0.98) !important; }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    .btn--loading { pointer-events: none; }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    /* Proposal preview */
+    .proposal-section {
+      margin-top: 48px;
+      animation: fadeUp 0.6s ease both;
+      display: none;
+    }
+
+    .proposal-section.visible { display: block; }
+
+    .proposal-section.visible .proposal-doc {
+      animation: proposalReveal 0.7s cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+
+    @keyframes proposalReveal {
+      from { opacity: 0; transform: translateY(24px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .proposal-section__toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .proposal-section__toolbar h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .proposal-section__toolbar span {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* A4 proposal card */
+    .proposal-doc-wrap {
+      max-width: 794px;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+
+    @media (max-width: 860px) {
+      .proposal-doc-wrap {
+        transform-origin: top center;
+        transform: scale(calc((100vw - 48px) / 794));
+        margin-bottom: calc((794px * 297 / 210) * ((100vw - 48px) / 794 - 1));
+      }
+    }
+
+    .proposal-doc {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 210 / 297;
+      background: #fafafa;
+      color: #1a1a1a;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.5);
+    }
+
+    .proposal-doc__border {
+      position: absolute;
+      inset: 20px;
+      border: 2px solid var(--gold);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .proposal-doc__watermark {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) rotate(-90deg);
+      font-size: 7rem;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      color: rgba(212,175,55,0.06);
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 0;
+      user-select: none;
+    }
+
+    .proposal-doc__inner {
+      position: relative;
+      z-index: 1;
+      padding: 48px 56px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .proposal-doc__top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 40px;
+    }
+
+    .proposal-doc__logo {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: #1a1a1a;
+    }
+
+    .proposal-doc__logo span { color: var(--gold); }
+
+    .proposal-doc__meta {
+      text-align: right;
+      font-size: 0.72rem;
+      color: #666;
+      line-height: 1.8;
+    }
+
+    .proposal-doc__meta strong {
+      color: #1a1a1a;
+      font-weight: 600;
+    }
+
+    .proposal-doc__title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 6px;
+    }
+
+    .proposal-doc__subtitle {
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 32px;
+    }
+
+    .proposal-doc__client {
+      background: rgba(212,175,55,0.08);
+      border-left: 3px solid var(--gold);
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      border-radius: 0 6px 6px 0;
+    }
+
+    .proposal-doc__client p {
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    .proposal-doc__client h4 {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .proposal-doc__table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: auto;
+    }
+
+    .proposal-doc__table th {
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #999;
+      padding: 10px 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .proposal-doc__table th:last-child { text-align: right; }
+
+    .proposal-doc__table td {
+      padding: 14px 0;
+      font-size: 0.85rem;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .proposal-doc__table td:last-child {
+      text-align: right;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .proposal-doc__total-block {
+      text-align: right;
+      padding-top: 24px;
+      border-top: 2px solid var(--gold);
+      margin-top: 16px;
+    }
+
+    .proposal-doc__total-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    .proposal-doc__total-value {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: -0.03em;
+      margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .proposal-doc__footer {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid #e8e8e8;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      font-size: 0.68rem;
+      color: #aaa;
+      line-height: 1.7;
+    }
+
+    .proposal-doc__footer strong {
+      display: block;
+      color: #555;
+      font-weight: 600;
+      font-size: 0.72rem;
+      margin-bottom: 2px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: rgba(20,20,20,0.95);
+      border: 1px solid rgba(212,175,55,0.3);
+      color: var(--text);
+      padding: 14px 24px;
+      border-radius: 100px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+      z-index: 1000;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: var(--glass-border);
+      margin: 0 28px;
+    }
+
+    /* Calc meta */
+    .calc-meta {
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      background: rgba(0,0,0,0.25);
+      border: 1px solid var(--glass-border);
+    }
+
+    .calc-meta__row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      padding: 4px 0;
+    }
+
+    .calc-meta__row span:last-child {
+      color: var(--gold);
+      font-weight: 500;
+    }
+
+    .calc-meta__formula {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--glass-border);
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #4ade80;
+      margin-right: 6px;
+      box-shadow: 0 0 8px rgba(74,222,128,0.5);
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    .proposal-doc__terms {
+      margin-top: 20px;
+      padding: 14px 16px;
+      background: #f7f7f7;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      color: #999;
+      line-height: 1.7;
+    }
+
+    .proposal-doc__terms strong {
+      display: block;
+      color: #666;
+      font-size: 0.68rem;
+      margin-bottom: 4px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* Focus & accessibility */
+    :focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+    }
+
+    .quality-card:focus-within {
+      border-color: rgba(212,175,55,0.4);
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 420px;
+      background: #111;
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 32px;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+      transform: translateY(16px) scale(0.97);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .modal-overlay.open .modal {
+      transform: translateY(0) scale(1);
+    }
+
+    .modal h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .modal p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-top: 10px;
+      line-height: 1.6;
+    }
+
+    .modal__actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      justify-content: flex-end;
+    }
+
+    /* App footer */
+    .app-footer {
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      letter-spacing: 0.04em;
+    }
+
+    .app-footer__save {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+      transition: color 0.3s;
+    }
+
+    .app-footer__save.saved { color: var(--gold); }
+
+    .app-footer__save svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .btn--demo {
+      background: transparent;
+      color: var(--gold);
+      border: 1px solid rgba(212,175,55,0.25);
+    }
+
+    .btn--demo:hover {
+      background: var(--gold-dim);
+      border-color: rgba(212,175,55,0.45);
+    }
+
+    @media (max-width: 600px) {
+      .actions { flex-direction: column; }
+      .actions .btn { width: 100%; }
+      .header { flex-direction: column; align-items: flex-start; gap: 16px; }
+    }
+  </style>
 </head>
 <body>
-<div class="hero">
-<h1>Visualization Cost Estimator</h1>
-<p>Premium Version 1.0 (Project Scaffold)</p>
-<p>This project is intended to be completed across multiple source files.</p>
-</div>
-<script src="js/app.js"></script>
-<script src="js/pdf.js"></script>
+
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient__orb ambient__orb--1"></div>
+    <div class="ambient__orb ambient__orb--2"></div>
+    <div class="ambient__grid"></div>
+  </div>
+
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="brand__mark">DNA</div>
+        <div class="brand__text">
+          <h1>DNA Visuals</h1>
+          <p>Visualization Cost Estimator</p>
+        </div>
+      </div>
+      <div class="header__badge">Premium Studio</div>
+    </header>
+
+    <div class="main-grid">
+      <!-- Form -->
+      <section class="form-section">
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Project Details</h2>
+            <h3>Configure Your Estimate</h3>
+          </div>
+          <div class="divider"></div>
+          <div class="panel__body">
+            <div class="field-grid">
+              <div class="field">
+                <label for="clientName">Client Name</label>
+                <input type="text" id="clientName" placeholder="Enter client name" autocomplete="organization" />
+              </div>
+              <div class="field">
+                <label for="projectName">Project Name</label>
+                <input type="text" id="projectName" placeholder="Enter project name" />
+              </div>
+              <div class="field">
+                <label for="projectArea">Project Area (Sq.M)</label>
+                <input type="number" id="projectArea" placeholder="0" min="0" step="0.01" />
+              </div>
+              <div class="field">
+                <label for="animDuration">Animation Duration (Minutes)</label>
+                <input type="number" id="animDuration" placeholder="0" min="0" step="0.5" />
+              </div>
+            </div>
+
+            <div class="quality-section">
+              <label>Render Quality</label>
+              <div class="quality-cards">
+                <label class="quality-card active" data-quality="hd" data-rate="15000">
+                  <input type="radio" name="quality" value="hd" checked />
+                  <div class="quality-card__check"></div>
+                  <div class="quality-card__tier">HD</div>
+                  <div class="quality-card__rate">₹15,000</div>
+                  <div class="quality-card__unit">per minute</div>
+                </label>
+                <label class="quality-card" data-quality="fhd" data-rate="20000">
+                  <input type="radio" name="quality" value="fhd" />
+                  <div class="quality-card__check"></div>
+                  <div class="quality-card__tier">Full HD</div>
+                  <div class="quality-card__rate">₹20,000</div>
+                  <div class="quality-card__unit">per minute</div>
+                </label>
+              </div>
+            </div>
+
+            <div class="rate-banner">
+              <span class="rate-banner__label">Design Rate</span>
+              <span class="rate-banner__value">₹10 per Sq.M</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="btnGenerate" title="Ctrl + Enter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Generate Proposal
+          </button>
+          <button class="btn btn--secondary" id="btnPdf" title="Ctrl + S">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download PDF
+          </button>
+          <button class="btn btn--demo" id="btnDemo" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Load Demo
+          </button>
+          <button class="btn btn--ghost" id="btnReset" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+        </div>
+      </section>
+
+      <!-- Calculation -->
+      <aside class="calc-panel">
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Live Estimate</h2>
+            <h3>Cost Breakdown</h3>
+          </div>
+          <div class="divider"></div>
+          <div class="panel__body">
+            <div class="calc-rows">
+              <div class="calc-row">
+                <span class="calc-row__label">Design Cost</span>
+                <span class="calc-row__value" id="designCost">₹0</span>
+              </div>
+              <div class="calc-row">
+                <span class="calc-row__label">Animation Cost</span>
+                <span class="calc-row__value" id="animCost">₹0</span>
+              </div>
+            </div>
+            <div class="calc-total">
+              <div class="calc-total__label">Total Estimate</div>
+              <div class="calc-total__value" id="totalCost">₹0</div>
+            </div>
+            <div class="calc-meta">
+              <div class="calc-meta__row">
+                <span>Render Quality</span>
+                <span id="calcQuality">HD</span>
+              </div>
+              <div class="calc-meta__row">
+                <span>Animation Rate</span>
+                <span id="calcRate">₹15,000/min</span>
+              </div>
+              <div class="calc-meta__formula" id="calcFormula">
+                Design: 0 Sq.M × ₹10 · Animation: 0 min × ₹15,000
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Proposal Preview -->
+    <section class="proposal-section" id="proposalSection">
+      <div class="proposal-section__toolbar">
+        <h2>Proposal Preview</h2>
+        <span id="proposalStatus"><span class="status-dot"></span>Ready for export</span>
+      </div>
+      <div class="proposal-doc-wrap">
+      <div class="proposal-doc" id="proposalDoc">
+        <div class="proposal-doc__border"></div>
+        <div class="proposal-doc__watermark">DNA VISUALS</div>
+        <div class="proposal-doc__inner">
+          <div class="proposal-doc__top">
+            <div class="proposal-doc__logo">DNA <span>VISUALS</span></div>
+            <div class="proposal-doc__meta">
+              <div>Quote ID: <strong id="quoteId">—</strong></div>
+              <div>Date: <strong id="quoteDate">—</strong></div>
+            </div>
+          </div>
+          <div class="proposal-doc__title">Visualization Proposal</div>
+          <div class="proposal-doc__subtitle" id="proposalProject">Project —</div>
+          <div class="proposal-doc__client">
+            <p>Prepared for</p>
+            <h4 id="proposalClient">—</h4>
+          </div>
+          <table class="proposal-doc__table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Details</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody id="proposalTableBody"></tbody>
+          </table>
+          <div class="proposal-doc__total-block">
+            <div class="proposal-doc__total-label">Total Investment</div>
+            <div class="proposal-doc__total-value" id="proposalTotal">₹0</div>
+          </div>
+          <div class="proposal-doc__terms">
+            <strong>Terms &amp; Conditions</strong>
+            50% advance payment required to commence work. Balance due upon final delivery.
+            Revisions limited to two rounds per deliverable. Additional revisions billed at standard rates.
+            Delivery timeline subject to client feedback turnaround.
+          </div>
+          <div class="proposal-doc__footer">
+            <div>
+              <strong>DNA Visuals</strong>
+              Architectural Visualization Studio<br />
+              Premium 3D Renders &amp; Animations
+            </div>
+            <div style="text-align:right">
+              <strong>Valid for 30 days</strong>
+              This proposal is confidential<br />
+              &copy; <span id="footerYear"></span> DNA Visuals. All rights reserved.
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <footer class="app-footer">
+      <span>DNA Visuals Estimator v1.0</span>
+      <span class="app-footer__save" id="saveIndicator">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span id="saveText">Session ready</span>
+      </span>
+    </footer>
+  </div>
+
+  <div class="modal-overlay" id="resetModal" role="dialog" aria-modal="true" aria-labelledby="resetModalTitle">
+    <div class="modal">
+      <h3 id="resetModalTitle">Reset all fields?</h3>
+      <p>This will clear the current project details, estimate, and proposal preview. Your session data will be removed.</p>
+      <div class="modal__actions">
+        <button class="btn btn--ghost" id="resetCancel" type="button">Cancel</button>
+        <button class="btn btn--primary" id="resetConfirm" type="button">Reset Everything</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const DESIGN_RATE = 10;
+      const RATES = { hd: 15000, fhd: 20000 };
+      const QUALITY_LABELS = { hd: 'HD', fhd: 'Full HD' };
+      const STORAGE_KEY = 'dna-visuals-estimator';
+
+      const DEMO = {
+        clientName: 'Prestige Group',
+        projectName: 'Skyline Residences',
+        projectArea: '3200',
+        animDuration: '4',
+        quality: 'fhd',
+      };
+
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => document.querySelectorAll(sel);
+
+      const els = {
+        clientName: $('#clientName'),
+        projectName: $('#projectName'),
+        projectArea: $('#projectArea'),
+        animDuration: $('#animDuration'),
+        designCost: $('#designCost'),
+        animCost: $('#animCost'),
+        totalCost: $('#totalCost'),
+        proposalSection: $('#proposalSection'),
+        quoteId: $('#quoteId'),
+        quoteDate: $('#quoteDate'),
+        proposalProject: $('#proposalProject'),
+        proposalClient: $('#proposalClient'),
+        proposalTableBody: $('#proposalTableBody'),
+        proposalTotal: $('#proposalTotal'),
+        footerYear: $('#footerYear'),
+        calcQuality: $('#calcQuality'),
+        calcRate: $('#calcRate'),
+        calcFormula: $('#calcFormula'),
+        proposalStatus: $('#proposalStatus'),
+        toast: $('#toast'),
+        btnGenerate: $('#btnGenerate'),
+        btnPdf: $('#btnPdf'),
+        btnDemo: $('#btnDemo'),
+        btnReset: $('#btnReset'),
+        resetModal: $('#resetModal'),
+        resetCancel: $('#resetCancel'),
+        resetConfirm: $('#resetConfirm'),
+        saveIndicator: $('#saveIndicator'),
+        saveText: $('#saveText'),
+      };
+
+      let selectedQuality = 'hd';
+      let quoteIdValue = '';
+      let proposalVisible = false;
+      let animFrameIds = {};
+      let saveTimer = null;
+
+      const displayed = { design: 0, anim: 0, total: 0 };
+
+      function formatINR(n) {
+        return '₹' + Math.round(n).toLocaleString('en-IN');
+      }
+
+      function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      function animateValue(key, el, target, duration = 500) {
+        if (animFrameIds[key]) cancelAnimationFrame(animFrameIds[key]);
+        const start = displayed[key];
+        const diff = target - start;
+        if (diff === 0) { el.textContent = formatINR(target); return; }
+        const startTime = performance.now();
+
+        function tick(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const current = start + diff * easeOutCubic(progress);
+          displayed[key] = current;
+          el.textContent = formatINR(current);
+          if (progress < 1) {
+            animFrameIds[key] = requestAnimationFrame(tick);
+          } else {
+            displayed[key] = target;
+            el.textContent = formatINR(target);
+          }
+        }
+        animFrameIds[key] = requestAnimationFrame(tick);
+      }
+
+      function getValues() {
+        const area = parseFloat(els.projectArea.value) || 0;
+        const duration = parseFloat(els.animDuration.value) || 0;
+        const rate = RATES[selectedQuality];
+        const design = area * DESIGN_RATE;
+        const anim = duration * rate;
+        const total = design + anim;
+        return { area, duration, rate, design, anim, total };
+      }
+
+      function updateCalcMeta() {
+        const v = getValues();
+        const label = QUALITY_LABELS[selectedQuality];
+        els.calcQuality.textContent = label;
+        els.calcRate.textContent = `${formatINR(v.rate)}/min`;
+        els.calcFormula.textContent =
+          `Design: ${v.area.toLocaleString('en-IN')} Sq.M × ₹${DESIGN_RATE} · Animation: ${v.duration} min × ${formatINR(v.rate)}`;
+      }
+
+      function updateCalculations() {
+        const v = getValues();
+        animateValue('design', els.designCost, v.design);
+        animateValue('anim', els.animCost, v.anim);
+        animateValue('total', els.totalCost, v.total);
+        updateCalcMeta();
+        syncProposalIfVisible();
+        scheduleSave();
+      }
+
+      function syncProposalIfVisible() {
+        if (!proposalVisible || !quoteIdValue) return;
+        renderProposal();
+        els.proposalStatus.innerHTML = '<span class="status-dot"></span>Live — synced with estimate';
+      }
+
+      function generateQuoteId() {
+        const now = new Date();
+        const pad = (n, l = 2) => String(n).padStart(l, '0');
+        const datePart = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+        const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+        return `DNA-${datePart}-${rand}`;
+      }
+
+      function formatDate(d) {
+        return d.toLocaleDateString('en-IN', {
+          day: 'numeric', month: 'long', year: 'numeric'
+        });
+      }
+
+      function showToast(msg) {
+        els.toast.textContent = msg;
+        els.toast.classList.add('show');
+        clearTimeout(els.toast._timer);
+        els.toast._timer = setTimeout(() => els.toast.classList.remove('show'), 2800);
+      }
+
+      function validateForm() {
+        const client = els.clientName.value.trim();
+        const project = els.projectName.value.trim();
+        if (!client) { showToast('Please enter a client name'); els.clientName.focus(); return false; }
+        if (!project) { showToast('Please enter a project name'); els.projectName.focus(); return false; }
+        const v = getValues();
+        if (v.total <= 0) { showToast('Please enter area or duration to calculate costs'); return false; }
+        return true;
+      }
+
+      function buildProposalRows() {
+        const v = getValues();
+        const quality = QUALITY_LABELS[selectedQuality];
+        const rows = [];
+
+        if (v.design > 0) {
+          rows.push({
+            desc: 'Architectural Design',
+            detail: `${v.area.toLocaleString('en-IN')} Sq.M × ₹${DESIGN_RATE}/Sq.M`,
+            amount: v.design,
+          });
+        }
+        if (v.anim > 0) {
+          rows.push({
+            desc: `${quality} Animation`,
+            detail: `${v.duration} min × ${formatINR(v.rate)}/min`,
+            amount: v.anim,
+          });
+        }
+        return rows;
+      }
+
+      function getState() {
+        return {
+          clientName: els.clientName.value,
+          projectName: els.projectName.value,
+          projectArea: els.projectArea.value,
+          animDuration: els.animDuration.value,
+          quality: selectedQuality,
+          quoteId: quoteIdValue,
+          proposalVisible,
+        };
+      }
+
+      function applyQuality(quality) {
+        selectedQuality = quality;
+        $$('.quality-card').forEach(c => {
+          const active = c.dataset.quality === quality;
+          c.classList.toggle('active', active);
+          c.querySelector('input').checked = active;
+        });
+      }
+
+      function applyState(state) {
+        if (!state) return false;
+        els.clientName.value = state.clientName || '';
+        els.projectName.value = state.projectName || '';
+        els.projectArea.value = state.projectArea || '';
+        els.animDuration.value = state.animDuration || '';
+        applyQuality(state.quality || 'hd');
+        quoteIdValue = state.quoteId || '';
+        proposalVisible = !!state.proposalVisible;
+        if (proposalVisible && quoteIdValue) {
+          renderProposal();
+          els.proposalSection.classList.add('visible');
+          els.proposalStatus.innerHTML = '<span class="status-dot"></span>Live — synced with estimate';
+        }
+        updateCalculations();
+        return true;
+      }
+
+      function indicateSaved() {
+        els.saveIndicator.classList.add('saved');
+        els.saveText.textContent = 'Session saved';
+        clearTimeout(indicateSaved._timer);
+        indicateSaved._timer = setTimeout(() => {
+          els.saveIndicator.classList.remove('saved');
+          els.saveText.textContent = 'Session ready';
+        }, 2000);
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(getState()));
+          indicateSaved();
+        } catch (_) { /* storage unavailable */ }
+      }
+
+      function scheduleSave() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveState, 400);
+      }
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) applyState(JSON.parse(raw));
+        } catch (_) { /* ignore corrupt data */ }
+      }
+
+      function loadDemoData() {
+        applyState({ ...DEMO, quoteId: '', proposalVisible: false });
+        els.proposalSection.classList.remove('visible');
+        quoteIdValue = '';
+        proposalVisible = false;
+        scheduleSave();
+        showToast('Demo project loaded');
+      }
+
+      function openResetModal() {
+        els.resetModal.classList.add('open');
+        els.resetConfirm.focus();
+      }
+
+      function closeResetModal() {
+        els.resetModal.classList.remove('open');
+      }
+
+      function renderProposal() {
+        if (!quoteIdValue) quoteIdValue = generateQuoteId();
+        const now = new Date();
+        const v = getValues();
+        const rows = buildProposalRows();
+
+        els.quoteId.textContent = quoteIdValue;
+        els.quoteDate.textContent = formatDate(now);
+        els.proposalProject.textContent = `Project — ${els.projectName.value.trim()}`;
+        els.proposalClient.textContent = els.clientName.value.trim();
+        els.proposalTotal.textContent = formatINR(v.total);
+        els.footerYear.textContent = now.getFullYear();
+
+        els.proposalTableBody.innerHTML = rows.length
+          ? rows.map(r => `
+          <tr>
+            <td>${r.desc}</td>
+            <td style="color:#888;font-size:0.78rem">${r.detail}</td>
+            <td>${formatINR(r.amount)}</td>
+          </tr>
+        `).join('')
+          : '<tr><td colspan="3" style="color:#aaa;font-size:0.8rem;padding:20px 0">No line items — enter area or duration above.</td></tr>';
+      }
+
+      function generateProposal() {
+        if (!validateForm()) return;
+        quoteIdValue = generateQuoteId();
+        renderProposal();
+        proposalVisible = true;
+        els.proposalSection.classList.add('visible');
+        els.proposalStatus.innerHTML = '<span class="status-dot"></span>Live — synced with estimate';
+        els.proposalSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        showToast('Proposal generated successfully');
+      }
+
+      /* ── jsPDF Export ── */
+      function hexToRgb(hex) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return [r, g, b];
+      }
+
+      function setButtonLoading(btn, loading, label) {
+        if (loading) {
+          btn.dataset.originalHtml = btn.innerHTML;
+          btn.classList.add('btn--loading');
+          btn.disabled = true;
+          btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> ${label}`;
+        } else {
+          btn.classList.remove('btn--loading');
+          btn.disabled = false;
+          btn.innerHTML = btn.dataset.originalHtml || btn.innerHTML;
+        }
+      }
+
+      function generatePDF() {
+        if (!validateForm()) return;
+
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+          showToast('PDF library failed to load — check your internet connection');
+          return;
+        }
+
+        setButtonLoading(els.btnPdf, true, 'Generating…');
+
+        requestAnimationFrame(() => {
+          try {
+            if (!quoteIdValue) {
+              quoteIdValue = generateQuoteId();
+              renderProposal();
+              proposalVisible = true;
+              els.proposalSection.classList.add('visible');
+            }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const W = 210, H = 297;
+        const gold = hexToRgb('#D4AF37');
+        const margin = 18;
+        const inner = margin + 6;
+
+        const v = getValues();
+        const rows = buildProposalRows();
+        const client = els.clientName.value.trim();
+        const project = els.projectName.value.trim();
+        const now = new Date();
+
+        /* Background */
+        doc.setFillColor(250, 250, 250);
+        doc.rect(0, 0, W, H, 'F');
+
+        /* Gold border frame */
+        doc.setDrawColor(...gold);
+        doc.setLineWidth(0.6);
+        doc.rect(margin, margin, W - margin * 2, H - margin * 2);
+
+        /* Inner subtle border */
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.2);
+        doc.rect(inner, inner, W - inner * 2, H - inner * 2);
+
+        /* Vertical watermark */
+        const wmX = W / 2;
+        const wmY = H / 2;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(56);
+        doc.setTextColor(235, 228, 210);
+        doc.text('DNA VISUALS', wmX, wmY, { align: 'center', angle: 90 });
+        doc.setFontSize(14);
+        doc.setTextColor(245, 240, 230);
+        doc.text('ARCHITECTURAL VISUALIZATION', wmX, wmY + 42, { align: 'center', angle: 90 });
+
+        /* Header - Logo */
+        doc.setTextColor(26, 26, 26);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.text('DNA', inner + 4, inner + 14);
+        const dnaW = doc.getTextWidth('DNA ');
+        doc.setTextColor(...gold);
+        doc.text('VISUALS', inner + 4 + dnaW, inner + 14);
+
+        /* Gold accent rule */
+        doc.setDrawColor(...gold);
+        doc.setLineWidth(0.8);
+        doc.line(inner + 4, inner + 18, inner + 54, inner + 18);
+
+        /* Header - Meta */
+        doc.setTextColor(120, 120, 120);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const metaX = W - inner - 4;
+        doc.text('Quote ID:', metaX, inner + 8, { align: 'right' });
+        doc.setTextColor(26, 26, 26);
+        doc.setFont('helvetica', 'bold');
+        doc.text(quoteIdValue, metaX, inner + 13, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 120, 120);
+        doc.text('Date:', metaX, inner + 20, { align: 'right' });
+        doc.setTextColor(26, 26, 26);
+        doc.setFont('helvetica', 'bold');
+        doc.text(formatDate(now), metaX, inner + 25, { align: 'right' });
+
+        /* Title */
+        let y = inner + 36;
+        doc.setTextColor(26, 26, 26);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(20);
+        doc.text('Visualization Proposal', inner + 4, y);
+
+        y += 8;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(140, 140, 140);
+        doc.text(`Project — ${project}`, inner + 4, y);
+
+        /* Client block */
+        y += 14;
+        doc.setFillColor(252, 248, 235);
+        doc.rect(inner + 4, y - 4, W - (inner + 4) * 2, 18, 'F');
+        doc.setDrawColor(...gold);
+        doc.setLineWidth(1.2);
+        doc.line(inner + 4, y - 4, inner + 4, y + 14);
+
+        doc.setTextColor(140, 140, 140);
+        doc.setFontSize(8);
+        doc.text('Prepared for', inner + 10, y + 2);
+        doc.setTextColor(26, 26, 26);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.text(client, inner + 10, y + 10);
+
+        /* Table header */
+        y += 28;
+        const col1 = inner + 4;
+        const col2 = inner + 62;
+        const col3 = W - inner - 4;
+
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.3);
+        doc.line(col1, y, col3, y);
+
+        y += 6;
+        doc.setTextColor(160, 160, 160);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.text('DESCRIPTION', col1, y);
+        doc.text('DETAILS', col2, y);
+        doc.text('AMOUNT', col3, y, { align: 'right' });
+
+        y += 4;
+        doc.line(col1, y, col3, y);
+
+        /* Table rows */
+        doc.setFont('helvetica', 'normal');
+        rows.forEach((row) => {
+          y += 10;
+          doc.setTextColor(26, 26, 26);
+          doc.setFontSize(9);
+          doc.text(row.desc, col1, y);
+          doc.setTextColor(140, 140, 140);
+          doc.setFontSize(8);
+          doc.text(row.detail, col2, y);
+          doc.setTextColor(26, 26, 26);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.text(formatINR(row.amount), col3, y, { align: 'right' });
+          doc.setFont('helvetica', 'normal');
+          y += 4;
+          doc.setDrawColor(240, 240, 240);
+          doc.line(col1, y, col3, y);
+        });
+
+        /* Total block */
+        y += 16;
+        doc.setDrawColor(...gold);
+        doc.setLineWidth(0.8);
+        doc.line(col1, y, col3, y);
+
+        y += 10;
+        doc.setTextColor(140, 140, 140);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text('TOTAL INVESTMENT', col3, y, { align: 'right' });
+
+        y += 12;
+        doc.setTextColor(...gold);
+        doc.setFontSize(28);
+        doc.text(formatINR(v.total), col3, y, { align: 'right' });
+
+        /* Terms */
+        y += 22;
+        doc.setFillColor(247, 247, 247);
+        doc.rect(col1, y - 4, col3 - col1, 22, 'F');
+        doc.setTextColor(120, 120, 120);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        doc.text('TERMS & CONDITIONS', col1 + 4, y + 2);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6);
+        const terms = '50% advance payment required to commence work. Balance due upon final delivery. Revisions limited to two rounds per deliverable.';
+        doc.text(terms, col1 + 4, y + 8, { maxWidth: col3 - col1 - 8 });
+
+        /* Footer */
+        const footerY = H - margin - 22;
+        doc.setDrawColor(230, 230, 230);
+        doc.setLineWidth(0.3);
+        doc.line(col1, footerY, col3, footerY);
+
+        doc.setTextColor(170, 170, 170);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.text('DNA Visuals', col1, footerY + 6);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text('Architectural Visualization Studio', col1, footerY + 11);
+        doc.text('Premium 3D Renders & Animations', col1, footerY + 16);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Valid for 30 days', col3, footerY + 6, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.text('This proposal is confidential', col3, footerY + 11, { align: 'right' });
+        doc.text(`© ${now.getFullYear()} DNA Visuals. All rights reserved.`, col3, footerY + 16, { align: 'right' });
+
+        const filename = `DNA-Proposal-${quoteIdValue.replace(/[^a-zA-Z0-9-]/g, '')}.pdf`;
+        doc.save(filename);
+        showToast('PDF downloaded successfully');
+          } catch (err) {
+            showToast('PDF generation failed — please try again');
+            console.error(err);
+          } finally {
+            setButtonLoading(els.btnPdf, false);
+          }
+        });
+      }
+
+      function resetForm() {
+        els.clientName.value = '';
+        els.projectName.value = '';
+        els.projectArea.value = '';
+        els.animDuration.value = '';
+        selectedQuality = 'hd';
+        quoteIdValue = '';
+        proposalVisible = false;
+
+        $$('.quality-card').forEach(c => c.classList.remove('active'));
+        $$('.quality-card')[0].classList.add('active');
+        $$('input[name="quality"]')[0].checked = true;
+
+        Object.keys(animFrameIds).forEach(k => cancelAnimationFrame(animFrameIds[k]));
+        displayed.design = 0;
+        displayed.anim = 0;
+        displayed.total = 0;
+        els.designCost.textContent = '₹0';
+        els.animCost.textContent = '₹0';
+        els.totalCost.textContent = '₹0';
+        updateCalcMeta();
+        scheduleSave();
+
+        els.proposalSection.classList.remove('visible');
+        try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+        closeResetModal();
+        showToast('Form reset');
+      }
+
+      /* Events */
+      $$('.quality-card').forEach(card => {
+        card.addEventListener('click', () => {
+          $$('.quality-card').forEach(c => c.classList.remove('active'));
+          card.classList.add('active');
+          selectedQuality = card.dataset.quality;
+          card.querySelector('input').checked = true;
+          updateCalculations();
+        });
+      });
+
+      [els.projectArea, els.animDuration, els.clientName, els.projectName].forEach(el => {
+        el.addEventListener('input', updateCalculations);
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); generateProposal(); }
+        if (e.ctrlKey && e.key === 's') { e.preventDefault(); generatePDF(); }
+      });
+
+      els.btnGenerate.addEventListener('click', generateProposal);
+      els.btnPdf.addEventListener('click', generatePDF);
+      els.btnReset.addEventListener('click', resetForm);
+
+      els.footerYear.textContent = new Date().getFullYear();
+      updateCalculations();
+    })();
+  </script>
 </body>
 </html>
