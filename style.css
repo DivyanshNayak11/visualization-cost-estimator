@@ -1,0 +1,10 @@
+body{
+margin:0;
+background:#111;
+color:#fff;
+font-family:Arial,sans-serif;
+display:grid;
+place-items:center;
+height:100vh;
+}
+.hero{text-align:center}
